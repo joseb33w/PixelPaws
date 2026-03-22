@@ -30,42 +30,85 @@
     console.log('[Patches] All patches applied!');
   }
 
-  /* ── 1. Default Shop Items ── */
+  /* —— Shop Item Normalization —— */
+  function normalizeShopItems() {
+    if (!window.S?.shopItems || !Array.isArray(window.S.shopItems)) return;
+    const pluralMap = { toys: 'toy', foods: 'food', heals: 'healing', weapons: 'gear', items: 'gear' };
+    const categoryToType = { 'Food': 'food', 'Toys': 'toy', 'Healing': 'healing', 'Gear': 'gear' };
+
+    window.S.shopItems.forEach(item => {
+      // If one field exists but not the other, copy it
+      if (item.item_type && !item.category) item.category = item.item_type;
+      if (item.category && !item.item_type) item.item_type = item.category;
+
+      // Map capitalized categories to lowercase item_type
+      if (item.category && categoryToType[item.category]) {
+        item.item_type = categoryToType[item.category];
+        item.category = categoryToType[item.category];
+      }
+
+      // Normalize to lowercase
+      if (item.category && typeof item.category === 'string') item.category = item.category.toLowerCase();
+      if (item.item_type && typeof item.item_type === 'string') item.item_type = item.item_type.toLowerCase();
+
+      // Handle plurals
+      if (item.category && pluralMap[item.category]) item.category = pluralMap[item.category];
+      if (item.item_type && pluralMap[item.item_type]) item.item_type = pluralMap[item.item_type];
+    });
+  }
+
+  /* —— 1. Default Shop Items —— */
   function patchShopDefaults() {
     if (!window.DEFAULT_SHOP_ITEMS) return;
 
-    // Check immediately
-    if (!window.S.shopItems || window.S.shopItems.length === 0) {
-      window.S.shopItems = window.DEFAULT_SHOP_ITEMS;
-      console.log('[Patches] Injected default shop items');
+    function injectDefaults() {
+      if (!window.S.shopItems || window.S.shopItems.length === 0) {
+        window.S.shopItems = JSON.parse(JSON.stringify(window.DEFAULT_SHOP_ITEMS));
+        console.log('[Patches] Injected default shop items:', window.S.shopItems.length);
+      }
+      normalizeShopItems();
     }
 
-    // Also watch for future loadAll calls that might clear them
+    // Inject immediately
+    injectDefaults();
+
+    // Patch _nav to re-inject after navigation
     const originalNav = window._nav;
     if (originalNav) {
       window._nav = function(n) {
         originalNav(n);
-        // After navigating, if shop tab and items empty, inject defaults
         setTimeout(() => {
-          if (window.S.shopItems && window.S.shopItems.length === 0 && window.DEFAULT_SHOP_ITEMS) {
-            window.S.shopItems = window.DEFAULT_SHOP_ITEMS;
-            window.render();
-          }
-        }, 500);
+          injectDefaults();
+          if (n === 'shop') window.render();
+        }, 300);
       };
     }
 
-    // Observe state changes via a periodic check
+    // Periodic check — keeps items alive
     setInterval(() => {
       if (window.S && (!window.S.shopItems || window.S.shopItems.length === 0) && window.DEFAULT_SHOP_ITEMS) {
-        window.S.shopItems = window.DEFAULT_SHOP_ITEMS;
-        // Only re-render if we're on the shop page
+        window.S.shopItems = JSON.parse(JSON.stringify(window.DEFAULT_SHOP_ITEMS));
+        normalizeShopItems();
         if (window.S.nav === 'shop') window.render();
+      } else if (window.S?.shopItems?.length > 0) {
+        normalizeShopItems();
       }
-    }, 2000);
+    }, 1500);
+
+    // Also normalize after any loadAll completes
+    // Intercept render to normalize before each render when on shop page
+    const origRender = window.render;
+    if (origRender) {
+      window.render = function() {
+        if (window.S?.nav === 'shop') {
+          injectDefaults();
+        }
+        return origRender.apply(this, arguments);
+      };
+    }
   }
 
-  /* ── 2. SFX Event Delegation ── */
+  /* —— 2. SFX Event Delegation —— */
   function patchSFXEventDelegation() {
     if (!window.SFX) return;
 
@@ -132,10 +175,10 @@
       if (el.classList.contains('btn') || el.classList.contains('btn-icon') || el.classList.contains('btn-primary') || el.classList.contains('btn-secondary') || el.classList.contains('btn-gold')) {
         window.SFX.click();
       }
-    }, true); // capture phase so we fire even if handlers stopPropagation
+    }, true);
   }
 
-  /* ── 3. Battle Handler Patches ── */
+  /* —— 3. Battle Handler Patches —— */
   function patchBattleHandlers() {
     if (!window.BattleFX || !window.SFX) return;
 
@@ -144,6 +187,8 @@
       const orig = window._startBattle;
       window._startBattle = function() {
         window.SFX.battleStart();
+        // Flash the screen on battle start
+        window.BattleFX.screenFlash('rgba(191,90,242,0.4)');
         return orig.apply(this, arguments);
       };
     }
@@ -152,22 +197,26 @@
     if (window._battleAction) {
       const origAction = window._battleAction;
       window._battleAction = function(action) {
-        // Find pet sprite elements for FX
-        const myPet = document.querySelector('.battle-my-pet .pet-sprite, .battle-player .pet-sprite, [class*="my-pet"] .pet-sprite-img');
-        const enemyPet = document.querySelector('.battle-enemy-pet .pet-sprite, .battle-opponent .pet-sprite, [class*="enemy"] .pet-sprite-img');
+        const myPet = document.querySelector('.battle-my-pet .pet-sprite, .battle-player .pet-sprite, [class*="my-pet"] .pet-sprite-img, .battle-sprite-left .pet-sprite-img');
+        const enemyPet = document.querySelector('.battle-enemy-pet .pet-sprite, .battle-opponent .pet-sprite, [class*="enemy"] .pet-sprite-img, .battle-sprite-right .pet-sprite-img');
 
         if (action === 'attack') {
+          const dmg = window.S.battleState?.lastDamage || Math.floor(Math.random() * 15 + 5);
           if (enemyPet) {
-            const dmg = window.S.battleState?.lastDamage || Math.floor(Math.random() * 15 + 5);
-            window.BattleFX.attackSequence(myPet, enemyPet, dmg, false);
+            window.BattleFX.attackSequence(myPet, enemyPet, dmg, Math.random() < 0.15);
           }
+          // Shake screen on attack
+          window.BattleFX.shake();
         } else if (action === 'defend') {
           window.BattleFX.defendSequence(myPet);
         } else if (action === 'special') {
+          const dmg = window.S.battleState?.lastDamage || Math.floor(Math.random() * 25 + 10);
           if (enemyPet) {
-            const dmg = window.S.battleState?.lastDamage || Math.floor(Math.random() * 25 + 10);
             window.BattleFX.specialSequence(myPet, enemyPet, dmg);
           }
+          // Big flash for special
+          window.BattleFX.screenFlash('rgba(255,215,0,0.3)');
+          window.BattleFX.shake();
         }
 
         return origAction.apply(this, arguments);
@@ -176,34 +225,57 @@
 
     // Watch for battle outcome by observing state changes
     let lastBattleStatus = null;
+    let lastEnemyHp = null;
+    let lastMyHp = null;
     setInterval(() => {
-      if (!window.S.battleState) { lastBattleStatus = null; return; }
-      const status = window.S.battleState.status || window.S.battleState.phase;
+      if (!window.S.battleState) { lastBattleStatus = null; lastEnemyHp = null; lastMyHp = null; return; }
+
+      const bs = window.S.battleState;
+      const status = bs.status || bs.phase;
+
+      // Detect HP changes for reactive effects
+      if (bs.enemyHp !== undefined && lastEnemyHp !== null && bs.enemyHp < lastEnemyHp) {
+        const enemyBar = document.querySelector('.battle-enemy-hp .bar-fill, .enemy-hp-bar .bar-fill, [class*="enemy"] .bar-fill');
+        if (enemyBar) window.BattleFX.hpGlow(enemyBar);
+      }
+      if (bs.myHp !== undefined && lastMyHp !== null && bs.myHp < lastMyHp) {
+        const myBar = document.querySelector('.battle-my-hp .bar-fill, .my-hp-bar .bar-fill, [class*="player"] .bar-fill');
+        if (myBar) window.BattleFX.hpGlow(myBar);
+        // Enemy attacked us — show effects on our pet
+        const myPet = document.querySelector('.battle-my-pet .pet-sprite-img, .battle-sprite-left .pet-sprite-img, [class*="my-pet"] .pet-sprite-img');
+        if (myPet) {
+          window.BattleFX.hitFlash(myPet);
+          window.BattleFX.particles(myPet, 5, '#ff4757');
+        }
+      }
+      lastEnemyHp = bs.enemyHp;
+      lastMyHp = bs.myHp;
+
+      // Win/lose detection
       if (status && status !== lastBattleStatus) {
         if (status === 'won' || status === 'victory') {
           window.SFX.victory();
           const myPet = document.querySelector('.battle-my-pet .pet-sprite, .battle-player .pet-sprite, .pet-sprite');
           if (myPet) window.BattleFX.victorySequence(myPet);
+          window.BattleFX.screenFlash('rgba(57,255,20,0.3)');
         } else if (status === 'lost' || status === 'defeat') {
           window.SFX.defeat();
           const myPet = document.querySelector('.battle-my-pet .pet-sprite, .battle-player .pet-sprite, .pet-sprite');
           if (myPet) window.BattleFX.defeatSequence(myPet);
+          window.BattleFX.screenFlash('rgba(255,71,87,0.3)');
         }
         lastBattleStatus = status;
       }
-    }, 300);
+    }, 200);
   }
 
-  /* ── 4. Care Handler Patches ── */
+  /* —— 4. Care Handler Patches —— */
   function patchCareHandlers() {
-    // Patch specific care handlers if they exist
     ['_feedPet', '_playPet', '_restPet', '_healPet'].forEach(name => {
       if (window[name]) {
         const orig = window[name];
         window[name] = function() {
-          // SFX already handled by event delegation, but let's also trigger XP sound on success
           const result = orig.apply(this, arguments);
-          // If it returns a promise, play XP sound after success
           if (result && result.then) {
             result.then(() => {
               if (window.SFX) window.SFX.xp();
@@ -214,7 +286,6 @@
       }
     });
 
-    // Patch quest completion
     if (window._submitQuest) {
       const origQuest = window._submitQuest;
       window._submitQuest = function() {
@@ -228,12 +299,11 @@
       };
     }
 
-    // Patch level up detection
+    // Level up detection
     let lastLevel = window.S?.pet?.level || 0;
     setInterval(() => {
       if (window.S?.pet?.level && window.S.pet.level > lastLevel && lastLevel > 0) {
         window.SFX?.levelUp();
-        // Show sparkles on pet
         const petEl = document.querySelector('.pet-sprite');
         if (petEl && window.BattleFX) window.BattleFX.sparkles(petEl);
       }
@@ -241,11 +311,10 @@
     }, 1000);
   }
 
-  /* ── 5. Sound Toggle Button ── */
+  /* —— 5. Sound Toggle Button —— */
   function addSoundToggleToTopbar() {
     if (!window.SFX) return;
 
-    // Use MutationObserver to inject sound toggle when topbar renders
     const observer = new MutationObserver(() => {
       const topbar = document.querySelector('.top-actions, .top-stats');
       if (topbar && !document.getElementById('sfx-toggle-btn')) {
@@ -267,6 +336,5 @@
     observer.observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
   }
 
-  // Start polling for app readiness
   waitForApp();
 })();
