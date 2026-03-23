@@ -1,0 +1,42 @@
+/* ═══════════════════════════════════════════
+   PixelPaws — UI Visibility Fixes
+   Fixes bottom nav cut-off & topbar overflow
+   ═══════════════════════════════════════════ */
+
+/* 1. More padding so content doesn't hide behind fixed nav */
+#app {
+  padding-bottom: 120px !important;
+}
+
+/* 2. Topbar: respect notch / status bar on iOS */
+.topbar {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* 3. Top stats row: tighter gap, no wrapping, allow scroll */
+.top-stats {
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 4. Icon buttons in topbar must not shrink */
+.btn-icon {
+  flex-shrink: 0 !important;
+}
+
+/* 5. Bottom nav: safe-area padding for home indicator */
+.nav-bar {
+  padding-bottom: env(safe-area-inset-bottom, 12px) !important;
+}
+
+/* 6. Nav buttons: a bit more top padding for easier tapping */
+.nav-btn {
+  padding: 10px 4px 8px !important;
+}
+
+/* 7. Daily-rewards topbar button also must not shrink */
+.dr-topbar-btn {
+  flex-shrink: 0 !important;
+}
