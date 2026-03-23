@@ -1,7 +1,8 @@
-/* ═══════════════════════════════════════════
-   PixelPaws — UI Visibility Fixes
+/* =========================================
+   PixelPaws - UI Visibility Fixes
    Fixes bottom nav cut-off & topbar overflow
-   ═══════════════════════════════════════════ */
+   + Enhanced logout button visibility
+   ========================================= */
 
 /* 1. More padding so content doesn't hide behind fixed nav */
 #app {
@@ -39,4 +40,50 @@
 /* 7. Daily-rewards topbar button also must not shrink */
 .dr-topbar-btn {
   flex-shrink: 0 !important;
+}
+
+/* =========================================
+   LOGOUT BUTTON - High Visibility
+   ========================================= */
+
+/* Make ALL topbar icon buttons more visible */
+.top-stats .btn-icon {
+  width: 40px !important;
+  height: 40px !important;
+  border: 2px solid var(--pixel-red, #ff4757) !important;
+  background: rgba(255, 71, 87, 0.15) !important;
+  color: #ff4757 !important;
+  font-size: 14px !important;
+  box-shadow: 0 0 8px rgba(255, 71, 87, 0.3), inset 0 0 6px rgba(255, 71, 87, 0.08) !important;
+  transition: all 0.2s ease !important;
+}
+.top-stats .btn-icon:hover,
+.top-stats .btn-icon:active {
+  border-color: #ff6b81 !important;
+  background: rgba(255, 71, 87, 0.3) !important;
+  box-shadow: 0 0 14px rgba(255, 71, 87, 0.5) !important;
+  transform: scale(1.08);
+}
+
+/* Sound toggle button - differentiate with cyan */
+.top-stats .btn-icon.sound-toggle-btn,
+.top-stats .btn-icon[title*="ound"],
+.top-stats .btn-icon[aria-label*="ound"] {
+  border-color: var(--pixel-cyan, #00f5ff) !important;
+  background: rgba(0, 245, 255, 0.12) !important;
+  color: #00f5ff !important;
+  box-shadow: 0 0 8px rgba(0, 245, 255, 0.25) !important;
+}
+
+/* Daily rewards topbar button - yellow glow */
+.dr-topbar-btn {
+  border-color: var(--pixel-yellow, #ffd700) !important;
+  background: rgba(255, 215, 0, 0.12) !important;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.25) !important;
+}
+.dr-topbar-btn:hover,
+.dr-topbar-btn:active {
+  border-color: #ffe44d !important;
+  background: rgba(255, 215, 0, 0.25) !important;
+  box-shadow: 0 0 14px rgba(255, 215, 0, 0.4) !important;
 }
